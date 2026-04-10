@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configuration — dev-bookstack</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <a class="logo" href="index.html">
+    <span class="icon">📚</span>
+    dev-bookstack
+  </a>
+  <span class="header-tagline">Local BookStack on OpenShift / CRC</span>
+  <div class="header-badges">
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Getting Started</div>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="index.html#stack">Stack</a>
+      <a href="index.html#quickstart">Quick Start</a>
+      <a href="index.html#teardown">Teardown</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reference</div>
+    <nav>
+      <a href="configuration.html" class="active">Configuration</a>
+      <a href="sync.html">Sync System</a>
+      <a href="workflows.html">CI / CD Workflows</a>
+      <a href="content.html">Content Authoring</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">On this page</div>
+    <nav>
+      <a href="#credentials">Credentials</a>
+      <a href="#app-key">APP_KEY</a>
+      <a href="#app-url">APP_URL</a>
+      <a href="#storage">Persistent Storage</a>
+      <a href="#resources">Resource Limits</a>
+      <a href="#env-vars">Environment Variables</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="content">
+
+    <div class="page-hero">
+      <div class="label">Reference</div>
+      <h1>Configuration</h1>
+      <p>Everything you need to customise the dev-bookstack environment — from database credentials to resource limits and persistent storage.</p>
+    </div>
+
+    <!-- Credentials ------------------------------------------ -->
+    <h2 id="credentials">Database &amp; Application Credentials</h2>
+    <p>
+      All secrets live in <code>openshift/secrets.yaml</code>. The file uses <code>stringData</code>,
+      so values are stored as plain text in the manifest — do <strong>not</strong> commit real
+      credentials to version control.
+    </p>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ Development defaults only</strong>
+      The credentials shipped in <code>openshift/secrets.yaml</code> are for local development only. Always rotate them before connecting to any shared or internet-facing environment.
+    </div>
+
+    <h3>MariaDB secret (<code>mariadb-secret</code>)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Default value</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>root-password</code></td><td><code>devroot</code></td><td>MariaDB root password</td></tr>
+          <tr><td><code>database</code></td><td><code>bookstack</code></td><td>Database name</td></tr>
+          <tr><td><code>username</code></td><td><code>bookstack</code></td><td>Application DB user</td></tr>
+          <tr><td><code>password</code></td><td><code>devpassword</code></td><td>Application DB password</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>BookStack secret (<code>bookstack-secret</code>)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>app-key</code></td><td>Laravel application encryption key — format: <code>base64:&lt;44-char-base64&gt;</code></td></tr>
+          <tr><td><code>mail-password</code></td><td>SMTP password (empty by default — mail is logged, not sent)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>To change any credential, edit <code>openshift/secrets.yaml</code> before running <code>deploy.sh</code>. If the environment is already running, delete and re-create the secret:</p>
+
+    <div class="code-label">shell</div>
+    <pre><code>oc delete secret mariadb-secret -n bookstack-dev
+oc apply -f openshift/secrets.yaml</code></pre>
+
+    <!-- APP_KEY ---------------------------------------------- -->
+    <h2 id="app-key">Generating a New APP_KEY</h2>
+    <p>
+      BookStack (Laravel) requires a unique 256-bit base64-encoded encryption key. The one shipped
+      in <code>secrets.yaml</code> is for bootstrapping only. Generate a fresh one with:
+    </p>
+
+    <div class="code-label">shell</div>
+    <pre><code># Generate a new key (requires openssl)
+echo "base64:$(openssl rand -base64 32)"</code></pre>
+
+    <p>Paste the result as the value of <code>app-key</code> in <code>openshift/secrets.yaml</code>.</p>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ Changing APP_KEY invalidates existing sessions</strong>
+      All users will be logged out and any encrypted data (API tokens, etc.) will be invalidated. Only rotate the key on a fresh deployment or when you intend to reset the instance.
+    </div>
+
+    <!-- APP_URL ---------------------------------------------- -->
+    <h2 id="app-url">Changing APP_URL</h2>
+    <p>
+      By default, BookStack is exposed at:
+    </p>
+    <pre><code>http://bookstack-bookstack-dev.apps-crc.testing</code></pre>
+
+    <p>
+      If your CRC cluster uses a different wildcard domain, update <strong>two</strong> places in
+      <code>openshift/bookstack.yaml</code>:
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Location</th><th>Field</th><th>Example value</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Deployment env var</td>
+            <td><code>APP_URL</code></td>
+            <td><code>http://bookstack-bookstack-dev.apps-crc.testing</code></td>
+          </tr>
+          <tr>
+            <td>Route spec</td>
+            <td><code>spec.host</code></td>
+            <td><code>bookstack-bookstack-dev.apps-crc.testing</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout-tip">
+      <strong>💡 Tip</strong>
+      Run <code>crc console --credentials</code> to print your cluster domain if you're unsure what it is.
+    </div>
+
+    <p>After editing, re-apply the manifest:</p>
+    <div class="code-label">shell</div>
+    <pre><code>oc apply -f openshift/bookstack.yaml</code></pre>
+
+    <!-- Persistent Storage ------------------------------------ -->
+    <h2 id="storage">Persistent Storage</h2>
+    <p>Both services use PersistentVolumeClaims backed by CRC's default storage class (<code>ReadWriteOnce</code>):</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>PVC name</th><th>Mount path</th><th>Default size</th><th>Contents</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>mariadb-pvc</code></td>
+            <td><code>/var/lib/mysql</code></td>
+            <td>2 Gi</td>
+            <td>All BookStack database data</td>
+          </tr>
+          <tr>
+            <td><code>bookstack-uploads-pvc</code></td>
+            <td><code>/config</code></td>
+            <td>5 Gi</td>
+            <td>Uploaded files, images, and BookStack config</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Data survives pod restarts and redeployments. It is <strong>permanently removed</strong> when you run <code>./teardown.sh</code>, which deletes the entire namespace.</p>
+
+    <h3>Resizing a PVC</h3>
+    <p>Edit the <code>storage</code> field in the relevant YAML file, then re-apply. CRC's storage class supports online expansion for <code>ReadWriteOnce</code> volumes:</p>
+
+    <div class="code-label">openshift/mariadb.yaml (excerpt)</div>
+    <pre><code>spec:
+  resources:
+    requests:
+      storage: 5Gi   # ← increase as needed</code></pre>
+
+    <!-- Resource Limits --------------------------------------- -->
+    <h2 id="resources">Resource Limits</h2>
+
+    <h3>BookStack</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>CPU</th><th>Memory</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Request</strong></td><td>200m</td><td>256 Mi</td></tr>
+          <tr><td><strong>Limit</strong></td><td>1000m (1 core)</td><td>512 Mi</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>MariaDB</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th></th><th>CPU</th><th>Memory</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Request</strong></td><td>100m</td><td>256 Mi</td></tr>
+          <tr><td><strong>Limit</strong></td><td>500m</td><td>512 Mi</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Health probes</h3>
+    <p>Both deployments include readiness and liveness probes. BookStack's readiness probe checks <code>GET /login</code> with a 60-second initial delay (PHP startup) and retries every 15 seconds.</p>
+
+    <!-- Environment Variables --------------------------------- -->
+    <h2 id="env-vars">BookStack Environment Variables</h2>
+    <p>These are injected into the BookStack container via the Deployment manifest in <code>openshift/bookstack.yaml</code>:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Variable</th><th>Value / Source</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>PUID</code> / <code>PGID</code></td><td><code>1000</code></td><td>Linux user/group for the linuxserver image</td></tr>
+          <tr><td><code>TZ</code></td><td><code>UTC</code></td><td>Timezone</td></tr>
+          <tr><td><code>APP_URL</code></td><td>Hard-coded in YAML</td><td>Must match the Route host</td></tr>
+          <tr><td><code>APP_KEY</code></td><td><code>bookstack-secret</code></td><td>Laravel encryption key</td></tr>
+          <tr><td><code>DB_HOST</code></td><td><code>mariadb.bookstack-dev.svc.cluster.local</code></td><td>In-cluster DNS for MariaDB Service</td></tr>
+          <tr><td><code>DB_PORT</code></td><td><code>3306</code></td><td></td></tr>
+          <tr><td><code>DB_DATABASE</code></td><td><code>mariadb-secret</code></td><td>From Secret key <code>database</code></td></tr>
+          <tr><td><code>DB_USERNAME</code></td><td><code>mariadb-secret</code></td><td>From Secret key <code>username</code></td></tr>
+          <tr><td><code>DB_PASSWORD</code></td><td><code>mariadb-secret</code></td><td>From Secret key <code>password</code></td></tr>
+          <tr><td><code>MAIL_DRIVER</code></td><td><code>log</code></td><td>Emails are written to the log — not sent</td></tr>
+          <tr><td><code>REGISTRATION_ENABLED</code></td><td><code>true</code></td><td>Allows self-registration in dev</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout-info">
+      <strong>ℹ️ SCC requirement</strong>
+      The <code>linuxserver/bookstack</code> image runs as root internally. <code>deploy.sh</code> grants the <code>anyuid</code> SCC to the default service account in the <code>bookstack-dev</code> namespace to allow this. MariaDB uses <code>bitnami/mariadb</code>, which is already arbitrary-UID compatible.
+    </div>
+
+  </div><!-- /.content -->
+</main>
+
+</body>
+</html>

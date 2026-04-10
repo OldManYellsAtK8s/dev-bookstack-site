@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dev-bookstack — Documentation</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────── -->
+<header class="site-header">
+  <a class="logo" href="index.html">
+    <span class="icon">📚</span>
+    dev-bookstack
+  </a>
+  <span class="header-tagline">Local BookStack on OpenShift / CRC</span>
+  <div class="header-badges">
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/bookstack-backup.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/bookstack-backup.yml/badge.svg" alt="Backup" />
+    </a>
+  </div>
+</header>
+
+<!-- ── Sidebar ────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Getting Started</div>
+    <nav>
+      <a href="index.html" class="active">Overview</a>
+      <a href="index.html#stack">Stack</a>
+      <a href="index.html#quickstart">Quick Start</a>
+      <a href="index.html#teardown">Teardown</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reference</div>
+    <nav>
+      <a href="configuration.html">Configuration</a>
+      <a href="sync.html">Sync System</a>
+      <a href="workflows.html">CI / CD Workflows</a>
+      <a href="content.html">Content Authoring</a>
+    </nav>
+  </div>
+</aside>
+
+<!-- ── Main ───────────────────────────────────────────────── -->
+<main class="main">
+  <div class="content">
+
+    <div class="page-hero">
+      <div class="label">Overview</div>
+      <h1>dev-bookstack</h1>
+      <p>A local <a href="https://www.bookstackapp.com/" target="_blank" rel="noopener">BookStack</a> instance running on Red Hat CodeReady Containers (CRC), with an automated pipeline that syncs Markdown files from Git straight into BookStack pages.</p>
+    </div>
+
+    <!-- What is this ----------------------------------------- -->
+    <h2>What is this?</h2>
+    <p>
+      <strong>dev-bookstack</strong> is a batteries-included local knowledge-base environment.
+      You write content as plain Markdown files in a Git repository, and a CI/CD pipeline handles
+      linting, testing, and publishing them to a self-hosted BookStack wiki — automatically.
+    </p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">📝</div>
+        <h4>Git-native authoring</h4>
+        <p>Write pages as Markdown, commit them, and the pipeline does the rest.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔄</div>
+        <h4>Automatic sync</h4>
+        <p>Changed files are published to BookStack on every push to <code>develop</code>.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🛡️</div>
+        <h4>Quality gates</h4>
+        <p>Secret scanning, Markdown lint, pytest, and spell-check run before any sync.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">☁️</div>
+        <h4>Local + Remote</h4>
+        <p>CI syncs a local CRC instance; merges to <code>main</code> push to a remote production instance.</p>
+      </div>
+    </div>
+
+    <!-- Stack ------------------------------------------------- -->
+    <h2 id="stack">Stack</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Image</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>BookStack</strong></td>
+            <td><code>lscr.io/linuxserver/bookstack:latest</code></td>
+            <td>Requires <code>anyuid</code> SCC on OpenShift</td>
+          </tr>
+          <tr>
+            <td><strong>Database</strong></td>
+            <td><code>bitnami/mariadb:10.11</code></td>
+            <td>Arbitrary-UID compatible; utf8mb4 charset</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Both workloads run inside a single OpenShift namespace (<code>bookstack-dev</code>) on CRC, backed by PersistentVolumeClaims for data durability across pod restarts.</p>
+
+    <h3>Infrastructure at a glance</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Resource</th><th>File</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Secrets</td><td><code>openshift/secrets.yaml</code></td><td>DB credentials &amp; BookStack <code>APP_KEY</code></td></tr>
+          <tr><td>MariaDB</td><td><code>openshift/mariadb.yaml</code></td><td>PVC (2 Gi), Deployment, Service</td></tr>
+          <tr><td>BookStack</td><td><code>openshift/bookstack.yaml</code></td><td>PVC (5 Gi), Deployment, Service, Route</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Prerequisites ----------------------------------------- -->
+    <h2>Prerequisites</h2>
+    <ul>
+      <li><a href="https://developers.redhat.com/products/openshift-local/overview" target="_blank" rel="noopener">Red Hat CodeReady Containers (CRC)</a> installed and running</li>
+      <li><code>oc</code> CLI available in your <code>PATH</code></li>
+      <li>Sufficient resources — CRC needs at least 4 vCPUs and 9 GB RAM</li>
+    </ul>
+
+    <!-- Quick Start ------------------------------------------- -->
+    <h2 id="quickstart">Quick Start</h2>
+
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <h4>Start CRC and log in as kubeadmin</h4>
+          <p>You need the <code>kubeadmin</code> role to create namespaces and grant Security Context Constraints (SCCs).</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <h4>Configure your shell for CRC</h4>
+          <p>Point your <code>oc</code> and Docker CLI at the embedded CRC cluster.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <h4>Run the deploy script</h4>
+          <p>Creates the namespace, applies secrets, and deploys both workloads.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        <div class="step-body">
+          <h4>Open BookStack in your browser</h4>
+          <p>Wait ~60 seconds for the readiness probe to pass, then visit the URL below.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="code-label">shell</div>
+    <pre><code># 1. Start CRC and log in as kubeadmin
+#    (needed to create projects and grant SCCs)
+crc start
+eval $(crc oc-env)
+oc login -u kubeadmin https://api.crc.testing:6443
+# Password: crc console --credentials
+
+# 2. Deploy
+./deploy.sh</code></pre>
+
+    <p>BookStack will be available at:</p>
+    <pre><code>http://bookstack-bookstack-dev.apps-crc.testing</code></pre>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ Default credentials — change after first login</strong>
+      Email: <code>admin@admin.com</code> &nbsp;·&nbsp; Password: <code>password</code>
+    </div>
+
+    <!-- Teardown ---------------------------------------------- -->
+    <h2 id="teardown">Teardown</h2>
+    <p>To remove the entire environment, run:</p>
+    <pre><code>./teardown.sh</code></pre>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ Destructive action</strong>
+      This deletes the <code>bookstack-dev</code> namespace and <strong>all data within it</strong>, including the MariaDB PVC and BookStack uploads. The script will prompt you to type <code>yes</code> before proceeding.
+    </div>
+
+    <!-- Next steps -------------------------------------------- -->
+    <h2>Next steps</h2>
+    <div class="card-grid">
+      <div class="card">
+        <h4><a href="configuration.html">Configuration →</a></h4>
+        <p>Credentials, APP_URL customisation, persistent storage details.</p>
+      </div>
+      <div class="card">
+        <h4><a href="sync.html">Sync System →</a></h4>
+        <p>How Markdown files are published to BookStack via the REST API.</p>
+      </div>
+      <div class="card">
+        <h4><a href="workflows.html">CI / CD Workflows →</a></h4>
+        <p>The full GitHub Actions pipeline, backup schedule, and autofix.</p>
+      </div>
+      <div class="card">
+        <h4><a href="content.html">Content Authoring →</a></h4>
+        <p>Page templates, required sections, and image conventions.</p>
+      </div>
+    </div>
+
+  </div><!-- /.content -->
+</main>
+
+</body>
+</html>

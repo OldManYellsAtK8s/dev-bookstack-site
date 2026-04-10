@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sync System — dev-bookstack</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <a class="logo" href="index.html">
+    <span class="icon">📚</span>
+    dev-bookstack
+  </a>
+  <span class="header-tagline">Local BookStack on OpenShift / CRC</span>
+  <div class="header-badges">
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Getting Started</div>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="index.html#stack">Stack</a>
+      <a href="index.html#quickstart">Quick Start</a>
+      <a href="index.html#teardown">Teardown</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reference</div>
+    <nav>
+      <a href="configuration.html">Configuration</a>
+      <a href="sync.html" class="active">Sync System</a>
+      <a href="workflows.html">CI / CD Workflows</a>
+      <a href="content.html">Content Authoring</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">On this page</div>
+    <nav>
+      <a href="#how-it-works">How it works</a>
+      <a href="#directory-mapping">Directory mapping</a>
+      <a href="#env-vars">Environment variables</a>
+      <a href="#local-sync">Local sync (sync.sh)</a>
+      <a href="#images">Image handling</a>
+      <a href="#rate-limiting">Rate limiting</a>
+      <a href="#plan-mode">Plan mode</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="content">
+
+    <div class="page-hero">
+      <div class="label">Reference</div>
+      <h1>Sync System</h1>
+      <p>How Markdown files in the Git repository are published to BookStack pages via the BookStack REST API — automatically or on demand.</p>
+    </div>
+
+    <!-- How it works ----------------------------------------- -->
+    <h2 id="how-it-works">How it works</h2>
+    <p>
+      The sync is handled by <code>.github/scripts/bookstack-sync.py</code>, a Python script that
+      calls the <a href="https://demo.bookstackapp.com/api/docs" target="_blank" rel="noopener">BookStack REST API</a>.
+      For each Markdown file passed to it:
+    </p>
+
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <h4>Derive the page name</h4>
+          <p>The filename stem is converted to Title Case — hyphens and underscores become spaces. E.g. <code>old-fashioned.md</code> → <strong>Old Fashioned</strong>.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <h4>Search BookStack for an existing page</h4>
+          <p>The API is queried for a page with that exact name (case-insensitive).</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3a</span>
+        <div class="step-body">
+          <h4>Update — if the page exists</h4>
+          <p>The page content is replaced via <code>PUT /api/pages/{id}</code>. Images are uploaded first; local paths are substituted with BookStack URLs before the update.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3b</span>
+        <div class="step-body">
+          <h4>Create — if the page does not exist</h4>
+          <p>A new page is created in the target book via <code>POST /api/pages</code>. Images are then uploaded and the page is updated with resolved URLs.</p>
+        </div>
+      </li>
+    </ol>
+
+    <p>
+      A preflight check runs before any sync: the script attempts a <code>GET /api/search</code>
+      to verify connectivity and token validity. If this fails, the sync aborts immediately with a
+      descriptive error.
+    </p>
+
+    <!-- Directory mapping ------------------------------------ -->
+    <h2 id="directory-mapping">Directory Mapping (<code>bookstack-config.json</code>)</h2>
+    <p>
+      By default, every file lands in the book identified by <code>BOOKSTACK_BOOK_ID</code>.
+      To route files in different directories to different books, create a
+      <code>bookstack-config.json</code> at the repo root:
+    </p>
+
+    <div class="code-label">bookstack-config.json</div>
+    <pre><code>{
+    "directory_map": {
+        "cocktails": "env:BOOKSTACK_COCKTAILS_BOOK_ID",
+        "whiskeys":  "env:BOOKSTACK_WHISKEY_BOOK_ID"
+    },
+    "default_book_id": "env:BOOKSTACK_BOOK_ID"
+}</code></pre>
+
+    <p>The <code>"env:VAR_NAME"</code> syntax reads the book ID from an environment variable at runtime, keeping IDs out of the repository. You can also use plain integers:</p>
+
+    <div class="code-label">bookstack-config.json (inline IDs)</div>
+    <pre><code>{
+    "directory_map": {
+        "cocktails": 3,
+        "whiskeys":  7
+    },
+    "default_book_id": 1
+}</code></pre>
+
+    <h3>Lookup behaviour</h3>
+    <p>
+      The script walks up the path of each file looking for a matching directory name in
+      <code>directory_map</code>. For example, <code>cocktails/negroni.md</code> matches the
+      <code>"cocktails"</code> key. If no match is found, <code>default_book_id</code> (or
+      <code>BOOKSTACK_BOOK_ID</code>) is used. If no fallback is configured, the sync raises an error.
+    </p>
+
+    <!-- Environment variables -------------------------------- -->
+    <h2 id="env-vars">Environment Variables</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>BOOKSTACK_URL</code></td>
+            <td><span class="badge badge-blue">Required</span></td>
+            <td>Base URL of the BookStack instance — no trailing slash, no <code>/api</code> suffix. E.g. <code>http://bookstack-bookstack-dev.apps-crc.testing</code></td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_TOKEN_ID</code></td>
+            <td><span class="badge badge-blue">Required</span></td>
+            <td>API token ID. Generated in BookStack → <em>My Account → API Tokens</em>.</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_TOKEN_SECRET</code></td>
+            <td><span class="badge badge-blue">Required</span></td>
+            <td>API token secret (shown once at creation time).</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_BOOK_ID</code></td>
+            <td><span class="badge badge-slate">Optional*</span></td>
+            <td>Default book ID for new pages. Optional if <code>bookstack-config.json</code> covers all directories.</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_COCKTAILS_BOOK_ID</code></td>
+            <td><span class="badge badge-slate">Optional</span></td>
+            <td>Book ID for files under <code>cocktails/</code> (used when config references <code>env:BOOKSTACK_COCKTAILS_BOOK_ID</code>).</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_WHISKEY_BOOK_ID</code></td>
+            <td><span class="badge badge-slate">Optional</span></td>
+            <td>Book ID for files under <code>whiskeys/</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Local sync ------------------------------------------- -->
+    <h2 id="local-sync">Local Sync (<code>sync.sh</code>)</h2>
+    <p>
+      For running the sync from your workstation — without going through CI — use <code>sync.sh</code>.
+      It reads credentials from a <code>.sync-env</code> file (git-ignored) and auto-resolves the
+      BookStack URL from the CRC route if <code>BOOKSTACK_URL</code> is not set.
+    </p>
+
+    <h3>First-time setup</h3>
+    <div class="code-label">shell</div>
+    <pre><code># Copy the example credentials file
+cp .sync-env.example .sync-env
+
+# Fill in your token values
+$EDITOR .sync-env</code></pre>
+
+    <div class="code-label">.sync-env</div>
+    <pre><code>export BOOKSTACK_URL=""                  # leave blank to auto-resolve from CRC route
+export BOOKSTACK_TOKEN_ID="your-token-id"
+export BOOKSTACK_TOKEN_SECRET="your-token-secret"
+export BOOKSTACK_BOOK_ID="your-book-id"</code></pre>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ Never commit .sync-env</strong>
+      The file is listed in <code>.gitignore</code>. Keep it out of version control — it contains live API credentials.
+    </div>
+
+    <h3>Usage</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Command</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>./sync.sh</code></td><td>Syncs only files changed vs <code>origin/main</code></td></tr>
+          <tr><td><code>./sync.sh --all</code></td><td>Syncs every <code>.md</code> file in the repo (excluding <code>.github/</code>)</td></tr>
+          <tr><td><code>./sync.sh cocktails/negroni.md</code></td><td>Syncs one or more specific files</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The script creates a Python virtualenv in <code>.venv/</code> on first run and installs <code>requests</code> automatically.</p>
+
+    <!-- Image handling --------------------------------------- -->
+    <h2 id="images">Image Handling</h2>
+    <p>
+      BookStack pages often include images. The sync script handles the upload automatically:
+    </p>
+
+    <ul>
+      <li>Local image references — <code>![Alt](images/slug.jpg)</code> — are detected by a regex.</li>
+      <li>Each referenced image is uploaded to the BookStack Gallery API (<code>POST /api/image-gallery</code>). If the image already exists, it is updated instead (<code>PUT</code>).</li>
+      <li>The local path in the Markdown is replaced with the public BookStack URL before the page is saved.</li>
+      <li>Absolute URLs (<code>https://…</code>) are left untouched.</li>
+      <li>If a referenced image file is missing from disk, a warning is printed and the original path is preserved.</li>
+    </ul>
+
+    <div class="callout callout-tip">
+      <strong>💡 Image naming convention</strong>
+      Images should be placed at <code>&lt;content-dir&gt;/images/&lt;slug&gt;.jpg</code> where the slug matches the Markdown filename. E.g. for <code>cocktails/negroni.md</code>, the image lives at <code>cocktails/images/negroni.jpg</code>.
+    </div>
+
+    <!-- Rate limiting ---------------------------------------- -->
+    <h2 id="rate-limiting">Rate Limiting &amp; Retries</h2>
+    <p>
+      The BookStack API enforces rate limits. The sync script handles this gracefully:
+    </p>
+
+    <ul>
+      <li>A <strong>0.5-second delay</strong> is inserted between every API call.</li>
+      <li>On a <code>429 Too Many Requests</code> response, the script waits with <strong>exponential backoff</strong> (2<sup>attempt</sup> seconds) and retries up to <strong>5 times</strong>.</li>
+      <li>All other non-2xx responses raise an exception immediately.</li>
+    </ul>
+
+    <div class="code-label">Rate-limit behaviour summary</div>
+    <pre><code>Attempt 1: wait 2s
+Attempt 2: wait 4s
+Attempt 3: wait 8s
+Attempt 4: wait 16s
+Attempt 5: raise_for_status()</code></pre>
+
+    <!-- Plan mode -------------------------------------------- -->
+    <h2 id="plan-mode">Plan Mode (<code>--plan</code>)</h2>
+    <p>
+      Pass <code>--plan</code> as the first argument to preview what the sync <em>would</em> do
+      without making any changes. This is used in the CD pipeline to produce a summary in the GitHub
+      Actions step summary.
+    </p>
+
+    <div class="code-label">shell</div>
+    <pre><code>python .github/scripts/bookstack-sync.py --plan cocktails/negroni.md whiskeys/ardbeg-10.md</code></pre>
+
+    <p>Output includes a Terraform-style plan and a Mermaid diagram:</p>
+
+    <pre><code>BookStack will perform the following actions:
+
+  # page "Negroni" will be created
+  + page {
+      + name    = "Negroni"
+      + book_id = 3
+    }
+
+  # page "Ardbeg 10" will be updated in-place
+  ~ page {
+      ~ name    = "Ardbeg 10"
+      ~ markdown = (content updated)
+    }
+
+Plan: 1 to create, 1 to update.</code></pre>
+
+    <!-- Troubleshooting -------------------------------------- -->
+    <h2 id="troubleshooting">Troubleshooting</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Error</th><th>Cause</th><th>Fix</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Could not connect to BookStack</code></td>
+            <td><code>BOOKSTACK_URL</code> is wrong or the instance is not running</td>
+            <td>Verify the URL and that the BookStack pod is <code>Ready</code></td>
+          </tr>
+          <tr>
+            <td><code>Authentication failed (401)</code></td>
+            <td>Invalid <code>BOOKSTACK_TOKEN_ID</code> or <code>BOOKSTACK_TOKEN_SECRET</code></td>
+            <td>Regenerate the API token in BookStack → My Account → API Tokens</td>
+          </tr>
+          <tr>
+            <td><code>Permission denied (403)</code></td>
+            <td>API token exists but lacks permission to read/write pages</td>
+            <td>Ensure the token's user has at least <em>Editor</em> role in BookStack</td>
+          </tr>
+          <tr>
+            <td><code>API not found (404)</code></td>
+            <td>URL contains a path suffix, or BookStack API is disabled</td>
+            <td>Use the base URL only — no <code>/api</code> or <code>/index.php</code></td>
+          </tr>
+          <tr>
+            <td><code>No book ID configured for '…'</code></td>
+            <td>File is in an unmapped directory and <code>BOOKSTACK_BOOK_ID</code> is not set</td>
+            <td>Add the directory to <code>bookstack-config.json</code> or set <code>BOOKSTACK_BOOK_ID</code></td>
+          </tr>
+          <tr>
+            <td>Image uploaded but URL not substituted</td>
+            <td>Image path in Markdown uses an absolute URL or wrong relative path</td>
+            <td>Ensure images use relative paths like <code>images/slug.jpg</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /.content -->
+</main>
+
+</body>
+</html>

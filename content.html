@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Content Authoring — dev-bookstack</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <a class="logo" href="index.html">
+    <span class="icon">📚</span>
+    dev-bookstack
+  </a>
+  <span class="header-tagline">Local BookStack on OpenShift / CRC</span>
+  <div class="header-badges">
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Getting Started</div>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="index.html#stack">Stack</a>
+      <a href="index.html#quickstart">Quick Start</a>
+      <a href="index.html#teardown">Teardown</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reference</div>
+    <nav>
+      <a href="configuration.html">Configuration</a>
+      <a href="sync.html">Sync System</a>
+      <a href="workflows.html">CI / CD Workflows</a>
+      <a href="content.html" class="active">Content Authoring</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">On this page</div>
+    <nav>
+      <a href="#structure">Repository structure</a>
+      <a href="#naming">File naming</a>
+      <a href="#cocktail-template">Cocktail template</a>
+      <a href="#whiskey-template">Whiskey template</a>
+      <a href="#images">Images</a>
+      <a href="#rules">Authoring rules</a>
+      <a href="#ci-checks">CI checks</a>
+      <a href="#workflow">Publishing workflow</a>
+      <a href="#generators">Content generators</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="content">
+
+    <div class="page-hero">
+      <div class="label">Reference</div>
+      <h1>Content Authoring</h1>
+      <p>How to write, structure, and publish cocktail and whiskey pages to BookStack — including templates, image conventions, and the automated CI quality checks.</p>
+    </div>
+
+    <!-- Repository structure --------------------------------- -->
+    <h2 id="structure">Repository Structure</h2>
+    <p>Content lives in two top-level directories, each mapped to a dedicated BookStack book:</p>
+
+    <pre><code>repo/
+├── cocktails/
+│   ├── negroni.md
+│   ├── old-fashioned.md
+│   └── images/
+│       ├── negroni.jpg
+│       └── old-fashioned.jpg
+├── whiskeys/
+│   ├── ardbeg-10.md
+│   ├── glenfiddich-12.md
+│   └── images/
+│       ├── ardbeg-10.jpg
+│       └── glenfiddich-12.jpg
+└── bookstack-config.json</code></pre>
+
+    <!-- File naming ------------------------------------------ -->
+    <h2 id="naming">File Naming Convention</h2>
+    <p>
+      File names are used to derive the BookStack page title. The sync script converts the filename
+      stem to Title Case, treating hyphens and underscores as word separators:
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Filename</th><th>BookStack page title</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>old-fashioned.md</code></td><td>Old Fashioned</td></tr>
+          <tr><td><code>gin_and_tonic.md</code></td><td>Gin And Tonic</td></tr>
+          <tr><td><code>mojito.md</code></td><td>Mojito</td></tr>
+          <tr><td><code>glenfiddich-12.md</code></td><td>Glenfiddich 12</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Use lowercase, hyphen-separated words. Numbers are preserved.</p>
+
+    <!-- Cocktail template ------------------------------------ -->
+    <h2 id="cocktail-template">Cocktail Page Template</h2>
+    <p>Every file in <code>cocktails/</code> must include the following sections (H2 headings). The CI test suite verifies their presence.</p>
+
+    <h3>Required sections</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Section</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>## Details</code></td><td>Metadata table — author, date, glassware, season, allergens</td></tr>
+          <tr><td><code>## Recipe</code></td><td>Ingredients and method / instructions</td></tr>
+          <tr><td><code>## History</code></td><td>Origin and background of the cocktail</td></tr>
+          <tr><td><code>## Notes</code></td><td>Serving suggestions, variations, pairing notes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Minimal example</h3>
+    <div class="code-label">cocktails/negroni.md</div>
+    <pre><code>![Negroni](images/negroni.jpg)
+
+---
+
+## Details
+
+| Field         | Value          |
+|---------------|----------------|
+| Author        | Your Name      |
+| Date Created  | 2026-04-10     |
+| Updated       | 2026-04-10     |
+
+---
+
+## Recipe
+
+**Ingredients**
+
+- 30 ml gin
+- 30 ml sweet vermouth
+- 30 ml Campari
+
+**Method**
+
+Stir all ingredients over ice. Strain into a rocks glass. Garnish with orange peel.
+
+---
+
+## History
+
+The Negroni is said to have been invented in Florence in 1919 …
+
+---
+
+## Notes
+
+Works well as a pre-dinner aperitivo. Try substituting mezcal for gin for a smoky twist.</code></pre>
+
+    <!-- Whiskey template ------------------------------------- -->
+    <h2 id="whiskey-template">Whiskey Page Template</h2>
+    <p>Every file in <code>whiskeys/</code> must include these sections. Whiskey pages have stricter structural requirements than cocktail pages.</p>
+
+    <h3>Required sections</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Section</th><th>Required sub-sections</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>## Details</code></td><td>—</td><td>Metadata table with specific required fields (see below)</td></tr>
+          <tr><td><code>## Tasting Notes</code></td><td><code>### Nose</code>, <code>### Palate</code>, <code>### Finish</code></td><td>Structured sensory evaluation</td></tr>
+          <tr><td><code>## History</code></td><td>—</td><td>Distillery background and product history</td></tr>
+          <tr><td><code>## Notes</code></td><td>—</td><td>Food pairing, serving recommendations, personal notes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Required Details table fields</h3>
+    <p>The <code>## Details</code> table must contain at least these four rows (the CI test checks for them):</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Field</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Type</code></td><td>Single Malt Scotch</td></tr>
+          <tr><td><code>Origin</code></td><td>Islay, Scotland</td></tr>
+          <tr><td><code>Distiller</code></td><td>Ardbeg Distillery</td></tr>
+          <tr><td><code>ABV</code></td><td>46%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Minimal example</h3>
+    <div class="code-label">whiskeys/ardbeg-10.md</div>
+    <pre><code>![Ardbeg 10](images/ardbeg-10.jpg)
+
+---
+
+## Details
+
+| Field          | Value                  |
+|----------------|------------------------|
+| Author         | Your Name              |
+| Date Created   | 2026-04-10             |
+| Updated        | 2026-04-10             |
+| Type           | Single Malt Scotch     |
+| Origin         | Islay, Scotland        |
+| Distiller      | Ardbeg Distillery      |
+| Age Statement  | 10 Years               |
+| ABV            | 46%                    |
+
+---
+
+## Tasting Notes
+
+### Nose
+
+Peat smoke, lemon, vanilla, and a hint of toffee.
+
+### Palate
+
+Rich and peaty with dark chocolate, espresso, and dried fruit.
+
+### Finish
+
+Long, smoky finish with a warming sweetness.
+
+---
+
+## History
+
+Ardbeg Distillery was founded in 1815 on the southern shore of Islay …
+
+---
+
+## Notes
+
+Best enjoyed neat or with a few drops of still water to open it up.</code></pre>
+
+    <!-- Images ---------------------------------------------- -->
+    <h2 id="images">Images</h2>
+    <p>Every page must have a <strong>leading image</strong> as its very first line:</p>
+
+    <pre><code>![Page Title](images/slug.jpg)</code></pre>
+
+    <h3>Conventions</h3>
+    <ul>
+      <li>Images live in <code>&lt;content-dir&gt;/images/</code></li>
+      <li>The image filename must match the Markdown filename (e.g., <code>negroni.md</code> → <code>images/negroni.jpg</code>)</li>
+      <li>Only <code>.jpg</code> images are expected by the CI tests</li>
+      <li>Images are uploaded to the BookStack Gallery API automatically during sync</li>
+      <li>The CI test verifies that every page has an image reference <strong>and</strong> that the referenced file exists on disk</li>
+      <li>A reverse check also runs: every image in <code>images/</code> must have a corresponding Markdown file</li>
+    </ul>
+
+    <h3>Auto-generated placeholder images</h3>
+    <p>
+      When a new Markdown file is pushed to <code>develop</code> without a corresponding image, the
+      <a href="workflows.html#image-gen">image generation workflow</a> automatically creates a
+      placeholder image using Pillow and commits it back to the branch. You can replace it with a
+      real image at any time.
+    </p>
+
+    <!-- Authoring rules -------------------------------------- -->
+    <h2 id="rules">Authoring Rules</h2>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ No H1 headings</strong>
+      Do not use <code># Page Title</code> H1 headings in your Markdown. BookStack renders the page title from its own UI. The CI test will fail if an H1 is detected.
+    </div>
+
+    <h3>Markdown style</h3>
+    <ul>
+      <li>Use H2 (<code>##</code>) for top-level sections and H3 (<code>###</code>) for subsections</li>
+      <li>Separate sections with a horizontal rule (<code>---</code>) for visual clarity in BookStack</li>
+      <li>Use tables (pipe-delimited) for structured metadata in the Details section</li>
+      <li>Files must not be empty — the CI will catch zero-byte files</li>
+    </ul>
+
+    <h3>Markdown lint</h3>
+    <p>The markdown linter uses the rules defined in <code>.markdownlint.json</code>. Common rules to be aware of:</p>
+    <ul>
+      <li>Consistent heading style</li>
+      <li>No trailing spaces</li>
+      <li>Blank line required before and after headings and code blocks</li>
+    </ul>
+
+    <h3>Spell check</h3>
+    <p>
+      Spell checking uses <a href="https://cspell.org/" target="_blank" rel="noopener">cspell</a>
+      with the config in <code>.cspell.json</code>. Spell-check failures appear as inline
+      annotations on the PR diff. They are <strong>warnings</strong> only — the pipeline
+      continues even if words are flagged. Add custom words to <code>.cspell.json</code> to
+      suppress false positives.
+    </p>
+
+    <!-- CI checks -------------------------------------------- -->
+    <h2 id="ci-checks">What CI Checks on Your Content</h2>
+    <p>The test suite in <code>tests/test_content.py</code> runs parametrised checks against every page:</p>
+
+    <h3>Cocktail pages</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it verifies</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Required sections</td><td><code>## Details</code>, <code>## Recipe</code>, <code>## History</code>, <code>## Notes</code> all present</td></tr>
+          <tr><td>No H1 heading</td><td>File does not contain a line starting with <code># </code></td></tr>
+          <tr><td>Image reference present</td><td>File starts with <code>![…](images/….jpg)</code></td></tr>
+          <tr><td>Image file exists</td><td>The referenced image file is on disk</td></tr>
+          <tr><td>Not empty</td><td>File size is greater than 0</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Whiskey pages</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it verifies</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Required sections</td><td><code>## Details</code>, <code>## Tasting Notes</code>, <code>## History</code>, <code>## Notes</code> all present</td></tr>
+          <tr><td>No H1 heading</td><td>File does not contain a line starting with <code># </code></td></tr>
+          <tr><td>Image reference present</td><td>File starts with <code>![…](images/….jpg)</code></td></tr>
+          <tr><td>Image file exists</td><td>The referenced image file is on disk</td></tr>
+          <tr><td>Details table fields</td><td><code>Type</code>, <code>Origin</code>, <code>Distiller</code>, <code>ABV</code> rows present in Details table</td></tr>
+          <tr><td>Tasting Notes subsections</td><td><code>### Nose</code>, <code>### Palate</code>, <code>### Finish</code> all present</td></tr>
+          <tr><td>Not empty</td><td>File size is greater than 0</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Coverage checks</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Check</th><th>What it verifies</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Cocktail image coverage</td><td>Every <code>.jpg</code> in <code>cocktails/images/</code> has a matching <code>.md</code> file</td></tr>
+          <tr><td>Whiskey image coverage</td><td>Every <code>.jpg</code> in <code>whiskeys/images/</code> has a matching <code>.md</code> file</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Publishing workflow ---------------------------------- -->
+    <h2 id="workflow">Publishing Workflow</h2>
+
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <h4>Create or edit a Markdown file</h4>
+          <p>Write your content in <code>cocktails/</code> or <code>whiskeys/</code>. Add an image to <code>images/</code> with the matching name.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <h4>Commit and push to <code>develop</code></h4>
+          <p>The CI pipeline starts automatically. If an image is missing, the image-generation workflow creates a placeholder and commits it.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <h4>CI runs quality gates</h4>
+          <p>Secret scan → lint → tests → spell check → sync to local BookStack. If any gate fails, <a href="workflows.html#autofix">Claude Autofix</a> attempts a fix automatically.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        <div class="step-body">
+          <h4>PR created automatically</h4>
+          <p>After a successful CI run, a pull request from <code>develop → main</code> is created (or updated if one already exists).</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">5</span>
+        <div class="step-body">
+          <h4>Merge the PR</h4>
+          <p>Merging to <code>main</code> triggers the CD pipeline, which syncs the pages to the remote production BookStack instance.</p>
+        </div>
+      </li>
+    </ol>
+
+    <!-- Generators ------------------------------------------ -->
+    <h2 id="generators">Content Generators</h2>
+    <p>
+      The scripts in <code>.github/scripts/</code> can generate entire batches of correctly
+      structured pages from data definitions:
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Script</th><th>Output</th><th>Usage</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>generate-cocktail-pages.py</code></td>
+            <td>One <code>.md</code> per cocktail in <code>cocktails/</code></td>
+            <td><code>python3 .github/scripts/generate-cocktail-pages.py</code></td>
+          </tr>
+          <tr>
+            <td><code>generate-whiskey-pages.py</code></td>
+            <td>One <code>.md</code> per whiskey in <code>whiskeys/</code></td>
+            <td><code>python3 .github/scripts/generate-whiskey-pages.py</code></td>
+          </tr>
+          <tr>
+            <td><code>generate-cocktail-images.py</code></td>
+            <td>Placeholder <code>.jpg</code> images in <code>cocktails/images/</code></td>
+            <td>Run automatically by CI when images are missing</td>
+          </tr>
+          <tr>
+            <td><code>generate-whiskey-images.py</code></td>
+            <td>Placeholder <code>.jpg</code> images in <code>whiskeys/images/</code></td>
+            <td>Run automatically by CI when images are missing</td>
+          </tr>
+          <tr>
+            <td><code>delete-whiskey-pages.py</code></td>
+            <td>Removes whiskey pages from BookStack</td>
+            <td>Run manually when retiring pages</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      The generator scripts embed cocktail and whiskey data definitions directly in the source.
+      Generated pages conform to the template format including inline HTML pill-group checkboxes
+      for glassware, seasons, and allergens (cocktails) and structured tasting note subsections
+      (whiskeys).
+    </p>
+
+    <div class="callout callout-tip">
+      <strong>💡 Adding new content</strong>
+      The fastest way to add a batch of new pages is to add entries to the data definitions inside the relevant generator script and re-run it. All generated pages will pass CI checks automatically.
+    </div>
+
+  </div><!-- /.content -->
+</main>
+
+</body>
+</html>

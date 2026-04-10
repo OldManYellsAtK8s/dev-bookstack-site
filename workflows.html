@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CI / CD Workflows — dev-bookstack</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <a class="logo" href="index.html">
+    <span class="icon">📚</span>
+    dev-bookstack
+  </a>
+  <span class="header-tagline">Local BookStack on OpenShift / CRC</span>
+  <div class="header-badges">
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/ci.yml/badge.svg" alt="CI" />
+    </a>
+    <a href="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/bookstack-backup.yml" target="_blank" rel="noopener">
+      <img src="https://github.com/OldManYellsAtK8s/dev-bookstack/actions/workflows/bookstack-backup.yml/badge.svg" alt="Backup" />
+    </a>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Getting Started</div>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="index.html#stack">Stack</a>
+      <a href="index.html#quickstart">Quick Start</a>
+      <a href="index.html#teardown">Teardown</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Reference</div>
+    <nav>
+      <a href="configuration.html">Configuration</a>
+      <a href="sync.html">Sync System</a>
+      <a href="workflows.html" class="active">CI / CD Workflows</a>
+      <a href="content.html">Content Authoring</a>
+    </nav>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">On this page</div>
+    <nav>
+      <a href="#ci">CI Pipeline</a>
+      <a href="#cd">CD Pipeline</a>
+      <a href="#backup">Backup Workflow</a>
+      <a href="#image-gen">Image Generation</a>
+      <a href="#autofix">Claude Autofix</a>
+      <a href="#secrets">Required Secrets</a>
+      <a href="#runners">Runners</a>
+    </nav>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="content">
+
+    <div class="page-hero">
+      <div class="label">Reference</div>
+      <h1>CI / CD Workflows</h1>
+      <p>The full suite of GitHub Actions workflows — from quality gates on the <code>develop</code> branch through automated publishing to production and weekly backups.</p>
+    </div>
+
+    <!-- Overview diagram ------------------------------------- -->
+    <h2>Pipeline Overview</h2>
+    <p>Content flows through two distinct environments:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Branch</th><th>Workflow</th><th>Environment</th><th>Trigger</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>develop</code></td>
+            <td>CI (<code>ci.yml</code>)</td>
+            <td>Local CRC instance <span class="badge badge-orange">self-hosted runner</span></td>
+            <td>Push with <code>.md</code> changes</td>
+          </tr>
+          <tr>
+            <td><code>main</code></td>
+            <td>CD (<code>cd.yml</code>)</td>
+            <td>Remote production instance <span class="badge badge-green">GitHub runner</span></td>
+            <td>PR merged to <code>main</code></td>
+          </tr>
+          <tr>
+            <td>Any</td>
+            <td>Backup (<code>bookstack-backup.yml</code>)</td>
+            <td>Both instances</td>
+            <td>Weekly cron (Sunday 02:00 UTC)</td>
+          </tr>
+          <tr>
+            <td>Any</td>
+            <td>Claude Autofix (<code>claude-autofix.yml</code>)</td>
+            <td>GitHub runner</td>
+            <td>CI failure or <code>@claude</code> PR comment</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- CI --------------------------------------------------- -->
+    <h2 id="ci">CI Pipeline (<code>ci.yml</code>)</h2>
+    <p>
+      Runs on every push to <code>develop</code> that modifies <code>*.md</code>,
+      <code>.cspell.json</code>, or <code>.markdownlint.json</code>. Can also be triggered manually
+      via <em>workflow_dispatch</em> with an option to sync all files (not just changed ones).
+    </p>
+
+    <h3>Jobs (in order)</h3>
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <h4>Secret Scan <span class="badge badge-green">ubuntu-latest</span></h4>
+          <p>Runs <a href="https://github.com/gitleaks/gitleaks" target="_blank" rel="noopener">Gitleaks</a> across the full git history to detect hardcoded credentials. Blocks all subsequent jobs on failure.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <h4>Markdown Lint <span class="badge badge-green">ubuntu-latest</span></h4>
+          <p>Runs <a href="https://github.com/DavidAnson/markdownlint-cli2" target="_blank" rel="noopener">markdownlint-cli2</a> against all <code>*.md</code> files using the rules in <code>.markdownlint.json</code>.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <h4>Tests <span class="badge badge-green">ubuntu-latest</span></h4>
+          <p>Runs <code>pytest tests/ -v --tb=short</code> with Python 3.12. Tests cover the sync helper functions and content integrity of all cocktail/whiskey pages. Requires markdown lint to pass first.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        <div class="step-body">
+          <h4>Spell Check <span class="badge badge-green">ubuntu-latest</span></h4>
+          <p>Runs <a href="https://cspell.org/" target="_blank" rel="noopener">cspell</a> in warning (non-blocking) mode against all <code>*.md</code> files using the config in <code>.cspell.json</code>. Inline annotations appear in the PR diff.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">5</span>
+        <div class="step-body">
+          <h4>Sync to Local BookStack <span class="badge badge-orange">self-hosted</span></h4>
+          <p>Runs <code>bookstack-sync.py</code> on the self-hosted CRC runner. Detects changed files automatically (or syncs all when triggered manually). BookStack URL is resolved live from the CRC route.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">6</span>
+        <div class="step-body">
+          <h4>Raise Pull Request <span class="badge badge-green">ubuntu-latest</span></h4>
+          <p>Creates a <code>develop → main</code> PR automatically after a successful sync. PR title includes today's date. Skipped if a PR already exists. Only runs on push events (not manual triggers).</p>
+        </div>
+      </li>
+    </ol>
+
+    <!-- CD --------------------------------------------------- -->
+    <h2 id="cd">CD Pipeline (<code>cd.yml</code>)</h2>
+    <p>
+      Triggered when a PR is merged into <code>main</code>. Syncs the same changed files (or all
+      files if triggered manually) to the <strong>remote production</strong> BookStack instance.
+    </p>
+
+    <h3>Jobs</h3>
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div class="step-body">
+          <h4>Collect changed files</h4>
+          <p>Uses <code>tj-actions/changed-files</code> to find which <code>*.md</code> files changed in the merge commit, or collects all files when <code>sync_all</code> is <code>true</code>.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div class="step-body">
+          <h4>Plan sync</h4>
+          <p>Runs <code>bookstack-sync.py --plan</code> and appends the Terraform-style output to the GitHub Actions step summary so you can review it in the workflow run.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <div class="step-body">
+          <h4>Sync to remote BookStack</h4>
+          <p>Runs the actual sync using the <code>BOOKSTACK_URL</code>, <code>BOOKSTACK_TOKEN_ID</code>, and <code>BOOKSTACK_TOKEN_SECRET</code> secrets for the production instance.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="callout callout-info">
+      <strong>ℹ️ Only runs on merged PRs</strong>
+      The job has an <code>if</code> guard: <code>github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'</code>. Closing a PR without merging will not trigger a sync.
+    </div>
+
+    <!-- Backup ----------------------------------------------- -->
+    <h2 id="backup">Backup Workflow (<code>bookstack-backup.yml</code>)</h2>
+    <p>
+      Runs every Sunday at 02:00 UTC and backs up <strong>both</strong> the local and remote BookStack
+      instances in parallel jobs. Can also be triggered manually with a configurable retention period.
+    </p>
+
+    <h3>What gets backed up?</h3>
+    <p>
+      The backup script (<code>.github/scripts/bookstack-backup.py</code>) paginates
+      through <code>GET /api/books</code> and exports every book as a markdown ZIP via
+      <code>GET /api/books/{id}/export/markdown</code>. All ZIPs are bundled into a single
+      <code>bookstack-backup-YYYY-MM-DD.tar.gz</code> archive.
+    </p>
+
+    <h3>Storage</h3>
+    <p>Archives are stored as <strong>GitHub Actions artifacts</strong> with a default retention of <strong>90 days</strong>. You can override this when triggering manually.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Artifact name pattern</th><th>Runner</th><th>Secrets used</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>bookstack-backup-remote-{run_id}-{attempt}</code></td>
+            <td><span class="badge badge-green">ubuntu-latest</span></td>
+            <td><code>BOOKSTACK_URL</code>, <code>BOOKSTACK_TOKEN_ID</code>, <code>BOOKSTACK_TOKEN_SECRET</code></td>
+          </tr>
+          <tr>
+            <td><code>bookstack-backup-local-{run_id}-{attempt}</code></td>
+            <td><span class="badge badge-orange">self-hosted</span></td>
+            <td><code>LOCAL_BOOKSTACK_URL</code>, <code>LOCAL_BOOKSTACK_TOKEN_ID</code>, <code>LOCAL_BOOKSTACK_TOKEN_SECRET</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout-warn">
+      <strong>⚠️ Backup failure behaviour</strong>
+      If any book fails to export, the entire archive is deleted and the artifact upload step fails with <code>if-no-files-found: error</code>. This ensures a partial backup is never silently accepted.
+    </div>
+
+    <!-- Image generation ------------------------------------- -->
+    <h2 id="image-gen">Image Generation Workflows</h2>
+    <p>
+      Two workflows automatically generate placeholder images for content pages that are missing them:
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Workflow</th><th>Trigger</th><th>Script</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>generate-images.yml</code></td>
+            <td>Push to <code>develop</code> with changes to <code>cocktails/*.md</code></td>
+            <td><code>generate-cocktail-images.py</code></td>
+          </tr>
+          <tr>
+            <td><code>generate-whiskey-images.yml</code></td>
+            <td>Push to <code>develop</code> with changes to <code>whiskeys/*.md</code></td>
+            <td><code>generate-whiskey-images.py</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Each workflow checks for Markdown files that have no corresponding image in
+      <code>&lt;dir&gt;/images/</code>. If any are missing, it runs the generation script (which
+      uses <a href="https://pillow.readthedocs.io/" target="_blank" rel="noopener">Pillow</a>) and
+      commits the generated images back to the branch with the commit message
+      <code>chore: auto-generate &lt;type&gt; images [skip ci]</code>.
+    </p>
+
+    <!-- Autofix ---------------------------------------------- -->
+    <h2 id="autofix">Claude Autofix (<code>claude-autofix.yml</code>)</h2>
+    <p>
+      Integrates <a href="https://github.com/anthropics/claude-code-action" target="_blank" rel="noopener">Claude Code</a>
+      into the workflow for two scenarios:
+    </p>
+
+    <h3>Manual: @claude mention</h3>
+    <p>
+      Mention <code>@claude</code> in any PR comment or review comment. Claude will read the
+      conversation and act on the request — useful for asking Claude to fix a lint error, rewrite
+      a section, or explain a problem.
+    </p>
+
+    <h3>Automatic: CI failure</h3>
+    <p>
+      When the CI workflow completes with a failure, this workflow automatically:
+    </p>
+    <ol>
+      <li>Finds the open PR for the failed branch.</li>
+      <li>Collects the names of failed jobs and steps.</li>
+      <li>Invokes Claude Code with the failure context.</li>
+    </ol>
+    <p>Claude will investigate the failure (Markdown lint errors, spell-check warnings, Python syntax errors) and commit a fix directly to the branch.</p>
+
+    <div class="callout callout-info">
+      <strong>ℹ️ Required secret</strong>
+      Both Claude jobs require an <code>ANTHROPIC_API_KEY</code> repository secret. See <a href="#secrets">Required Secrets</a> below.
+    </div>
+
+    <!-- Secrets --------------------------------------------- -->
+    <h2 id="secrets">Required GitHub Actions Secrets</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Secret</th><th>Used by</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>LOCAL_BOOKSTACK_TOKEN_ID</code></td>
+            <td>CI sync</td>
+            <td>API token ID for the local CRC BookStack instance</td>
+          </tr>
+          <tr>
+            <td><code>LOCAL_BOOKSTACK_TOKEN_SECRET</code></td>
+            <td>CI sync</td>
+            <td>API token secret for the local CRC BookStack instance</td>
+          </tr>
+          <tr>
+            <td><code>LOCAL_BOOKSTACK_BOOK_ID</code></td>
+            <td>CI sync</td>
+            <td>Default book ID on the local instance</td>
+          </tr>
+          <tr>
+            <td><code>LOCAL_BOOKSTACK_COCKTAILS_BOOK_ID</code></td>
+            <td>CI sync</td>
+            <td>Cocktails book ID on the local instance</td>
+          </tr>
+          <tr>
+            <td><code>LOCAL_BOOKSTACK_WHISKEY_BOOK_ID</code></td>
+            <td>CI sync</td>
+            <td>Whiskey book ID on the local instance</td>
+          </tr>
+          <tr>
+            <td><code>LOCAL_BOOKSTACK_URL</code></td>
+            <td>Backup (local)</td>
+            <td>Base URL of the local BookStack instance for backup (if URL can't be resolved from CRC route)</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_URL</code></td>
+            <td>CD sync, Backup (remote)</td>
+            <td>Base URL of the remote production BookStack instance</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_TOKEN_ID</code></td>
+            <td>CD sync, Backup (remote)</td>
+            <td>API token ID for the remote production instance</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_TOKEN_SECRET</code></td>
+            <td>CD sync, Backup (remote)</td>
+            <td>API token secret for the remote production instance</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_BOOK_ID</code></td>
+            <td>CD sync</td>
+            <td>Default book ID on the remote production instance</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_COCKTAILS_BOOK_ID</code></td>
+            <td>CD sync</td>
+            <td>Cocktails book ID on the remote production instance</td>
+          </tr>
+          <tr>
+            <td><code>BOOKSTACK_WHISKEY_BOOK_ID</code></td>
+            <td>CD sync</td>
+            <td>Whiskey book ID on the remote production instance</td>
+          </tr>
+          <tr>
+            <td><code>ANTHROPIC_API_KEY</code></td>
+            <td>Claude Autofix</td>
+            <td>Anthropic API key for Claude Code Action</td>
+          </tr>
+          <tr>
+            <td><code>GITHUB_TOKEN</code></td>
+            <td>All workflows</td>
+            <td>Automatically provided by GitHub Actions — no setup needed</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Runners ---------------------------------------------- -->
+    <h2 id="runners">Runner Requirements</h2>
+
+    <h3>GitHub-hosted runner (<code>ubuntu-latest</code>)</h3>
+    <p>Used for: secret scan, lint, tests, spell check, CD sync, backup (remote), Claude Autofix, PR creation. No special setup required.</p>
+
+    <h3>Self-hosted runner</h3>
+    <p>Used for: CI sync (step 5), backup (local), image generation. The runner must be:</p>
+    <ul>
+      <li>Running on the same machine or network where CRC is deployed</li>
+      <li>Have <code>oc</code> in its PATH and be authenticated as <code>kubeadmin</code> (or a user with read access to the <code>bookstack-dev</code> namespace)</li>
+      <li>Have Python 3 available (<code>python3</code>)</li>
+      <li>Have network access to the BookStack instance at <code>http://bookstack-bookstack-dev.apps-crc.testing</code></li>
+    </ul>
+
+    <div class="callout callout-tip">
+      <strong>💡 Setting up a self-hosted runner</strong>
+      Go to your repository → <em>Settings → Actions → Runners → New self-hosted runner</em> and follow the instructions. The runner registers itself and waits for jobs.
+    </div>
+
+  </div><!-- /.content -->
+</main>
+
+</body>
+</html>
