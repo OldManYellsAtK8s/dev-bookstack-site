@@ -1,0 +1,102 @@
+name: Test & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Required for the deploy job to publish to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only allow one deployment at a time; don't cancel in-progress runs
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ── 1. Test ────────────────────────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint HTML
+        run: npx --yes htmlhint "**/*.html"
+
+      - name: Check internal links and assets
+        run: |
+          python3 - <<'EOF'
+          """
+          Walk every .html file in the repo and verify that every local href/src
+          target resolves to a real file. External URLs and pure fragment links
+          (#anchor) are skipped. Exits non-zero if any broken references are found.
+          """
+          import re
+          import sys
+          from pathlib import Path
+
+          ROOT = Path(".")
+          HTML_FILES = sorted(ROOT.glob("**/*.html"))
+
+          # Match href="..." and src="..." values (single or double quotes)
+          REF_RE = re.compile(r'(?:href|src)=["\']([^"\'#][^"\']*)["\']')
+
+          errors = []
+
+          for html_file in HTML_FILES:
+              text = html_file.read_text(encoding="utf-8")
+              for match in REF_RE.finditer(text):
+                  target = match.group(1)
+                  # Skip external URLs
+                  if target.startswith(("http://", "https://", "//", "mailto:")):
+                      continue
+                  # Strip inline fragment, e.g. page.html#section -> page.html
+                  target = target.split("#")[0]
+                  if not target:
+                      continue
+                  resolved = (html_file.parent / target).resolve()
+                  if not resolved.exists():
+                      errors.append(f"{html_file}: broken reference → {match.group(1)}")
+
+          if errors:
+              print("Broken references found:")
+              for e in errors:
+                  print(f"  {e}")
+              sys.exit(1)
+
+          print(f"Checked {len(HTML_FILES)} HTML file(s) — all references OK.")
+          EOF
+
+  # ── 2. Deploy ──────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: test
+    # Only deploy on a push to main, not on pull requests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload the entire repo root as the site
+          path: "."
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
